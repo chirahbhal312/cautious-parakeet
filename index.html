@@ -51,7 +51,7 @@
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js';
     import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/webxr/ARButton.js';
 
-    // Canvas drawing logic
+    // Drawing canvas
     const canvas = document.getElementById('drawCanvas');
     const ctx = canvas.getContext('2d');
     const brushSize = document.getElementById('brushSize');
@@ -95,7 +95,7 @@
       texture.needsUpdate = true;
     }
 
-    // THREE.js AR Setup
+    // THREE + WebXR AR
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
 
@@ -114,55 +114,59 @@
     plane.position.set(0, 0, -0.5);
     scene.add(plane);
 
-    // Touch Interaction
+    // Raycaster and touch interaction variables
+    const raycaster = new THREE.Raycaster();
+    const touch = new THREE.Vector2();
     let isDragging = false;
-    let selectedObject = plane;
-    let previousTouchDistance = null;
-    let initialTouch = new THREE.Vector2();
+    let dragOffset = new THREE.Vector3();
+    let initialPinchDistance = null;
+    let initialScale = 1;
 
-    renderer.domElement.addEventListener('touchstart', onTouchStart, false);
-    renderer.domElement.addEventListener('touchmove', onTouchMove, false);
-    renderer.domElement.addEventListener('touchend', onTouchEnd, false);
-
-    function onTouchStart(event) {
+    renderer.domElement.addEventListener('touchstart', (event) => {
       if (event.touches.length === 1) {
-        isDragging = true;
-        initialTouch.set(event.touches[0].clientX, event.touches[0].clientY);
-      } else if (event.touches.length === 2) {
-        const dx = event.touches[0].clientX - event.touches[1].clientX;
-        const dy = event.touches[0].clientY - event.touches[1].clientY;
-        previousTouchDistance = Math.hypot(dx, dy);
-      }
-    }
-
-    function onTouchMove(event) {
-      event.preventDefault();
-
-      if (isDragging && event.touches.length === 1) {
-        const touch = event.touches[0];
-        const deltaX = (touch.clientX - initialTouch.x) / window.innerWidth;
-        const deltaY = (touch.clientY - initialTouch.y) / window.innerHeight;
-        selectedObject.position.x += deltaX;
-        selectedObject.position.y -= deltaY;
-        initialTouch.set(touch.clientX, touch.clientY);
-      } else if (event.touches.length === 2) {
-        const dx = event.touches[0].clientX - event.touches[1].clientX;
-        const dy = event.touches[0].clientY - event.touches[1].clientY;
-        const currentTouchDistance = Math.hypot(dx, dy);
-
-        if (previousTouchDistance) {
-          const scaleFactor = currentTouchDistance / previousTouchDistance;
-          selectedObject.scale.multiplyScalar(scaleFactor);
+        // Single touch: potential drag
+        const touchX = (event.touches[0].clientX / window.innerWidth) * 2 - 1;
+        const touchY = -(event.touches[0].clientY / window.innerHeight) * 2 + 1;
+        touch.set(touchX, touchY);
+        raycaster.setFromCamera(touch, camera);
+        const intersects = raycaster.intersectObject(plane);
+        if (intersects.length > 0) {
+          isDragging = true;
+          dragOffset.copy(intersects[0].point).sub(plane.position);
         }
-
-        previousTouchDistance = currentTouchDistance;
+      } else if (event.touches.length === 2) {
+        // Two-finger touch: potential pinch
+        const dx = event.touches[0].clientX - event.touches[1].clientX;
+        const dy = event.touches[0].clientY - event.touches[1].clientY;
+        initialPinchDistance = Math.sqrt(dx * dx + dy * dy);
+        initialScale = plane.scale.x;
       }
-    }
+    }, { passive: false });
 
-    function onTouchEnd(event) {
-      if (event.touches.length < 2) previousTouchDistance = null;
-      if (event.touches.length === 0) isDragging = false;
-    }
+    renderer.domElement.addEventListener('touchmove', (event) => {
+      event.preventDefault();
+      if (isDragging && event.touches.length === 1) {
+        const touchX = (event.touches[0].clientX / window.innerWidth) * 2 - 1;
+        const touchY = -(event.touches[0].clientY / window.innerHeight) * 2 + 1;
+        touch.set(touchX, touchY);
+        raycaster.setFromCamera(touch, camera);
+        const intersects = raycaster.intersectObject(plane);
+        if (intersects.length > 0) {
+          plane.position.copy(intersects[0].point.sub(dragOffset));
+        }
+      } else if (event.touches.length === 2 && initialPinchDistance !== null) {
+        const dx = event.touches[0].clientX - event.touches[1].clientX;
+        const dy = event.touches[0].clientY - event.touches[1].clientY;
+        const currentDistance = Math.sqrt(dx * dx + dy * dy);
+        const scaleFactor = currentDistance / initialPinchDistance;
+        plane.scale.setScalar(initialScale * scaleFactor);
+      }
+    }, { passive: false });
+
+    renderer.domElement.addEventListener('touchend', () => {
+      isDragging = false;
+      initialPinchDistance = null;
+    });
 
     renderer.setAnimationLoop(() => {
       renderer.render(scene, camera);
