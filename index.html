@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Canvas to AR</title>
+  <title>Canvas to AR (Touch Drawing)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
@@ -17,6 +17,7 @@
       z-index: 10;
       border: 2px solid #000;
       background: white;
+      touch-action: none;
     }
     .controls {
       position: fixed;
@@ -50,23 +51,34 @@
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js';
     import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/webxr/ARButton.js';
 
-    // Canvas Drawing
+    // Drawing canvas
     const canvas = document.getElementById('drawCanvas');
     const ctx = canvas.getContext('2d');
-    let drawing = false;
-
     const brushSize = document.getElementById('brushSize');
     const brushColor = document.getElementById('brushColor');
+    let drawing = false;
 
-    canvas.addEventListener('mousedown', e => {
+    function getTouchPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: e.touches[0].clientX - rect.left,
+        y: e.touches[0].clientY - rect.top
+      };
+    }
+
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
       drawing = true;
+      const pos = getTouchPos(e);
       ctx.beginPath();
-      ctx.moveTo(e.offsetX, e.offsetY);
+      ctx.moveTo(pos.x, pos.y);
     });
 
-    canvas.addEventListener('mousemove', e => {
+    canvas.addEventListener('touchmove', (e) => {
       if (!drawing) return;
-      ctx.lineTo(e.offsetX, e.offsetY);
+      e.preventDefault();
+      const pos = getTouchPos(e);
+      ctx.lineTo(pos.x, pos.y);
       ctx.strokeStyle = brushColor.value;
       ctx.lineWidth = parseInt(brushSize.value, 10);
       ctx.lineCap = 'round';
@@ -74,15 +86,16 @@
       texture.needsUpdate = true;
     });
 
-    canvas.addEventListener('mouseup', () => drawing = false);
-    canvas.addEventListener('mouseleave', () => drawing = false);
+    canvas.addEventListener('touchend', () => {
+      drawing = false;
+    });
 
     function clearCanvas() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       texture.needsUpdate = true;
     }
 
-    // Three.js Scene
+    // THREE + WebXR AR
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
 
@@ -92,25 +105,18 @@
     renderer.xr.enabled = true;
     document.body.appendChild(renderer.domElement);
 
-    // AR Button
     document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
 
-    // Texture from canvas
     const texture = new THREE.CanvasTexture(canvas);
     const geometry = new THREE.PlaneGeometry(0.3, 0.3);
     const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
     const plane = new THREE.Mesh(geometry, material);
-    plane.position.set(0, 0, -0.5); // Show 0.5 meters in front of the camera
+    plane.position.set(0, 0, -0.5);
     scene.add(plane);
 
-    // Animate
-    function animate() {
-      renderer.setAnimationLoop(() => {
-        renderer.render(scene, camera);
-      });
-    }
-
-    animate();
+    renderer.setAnimationLoop(() => {
+      renderer.render(scene, camera);
+    });
   </script>
 </body>
 </html>
