@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Canvas to AR</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+    #drawCanvas {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      border: 2px solid #000;
+      background: white;
+    }
+    .controls {
+      position: fixed;
+      top: 420px;
+      left: 10px;
+      background: rgba(255,255,255,0.8);
+      padding: 10px;
+      border-radius: 8px;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="drawCanvas" width="400" height="400"></canvas>
+  <div class="controls">
+    <label>
+      Color: <input type="color" id="brushColor" value="#000000" />
+    </label>
+    <label>
+      Size:
+      <select id="brushSize">
+        <option value="2">Thin</option>
+        <option value="4">Medium</option>
+        <option value="8">Thick</option>
+      </select>
+    </label>
+    <button onclick="clearCanvas()">Clear</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.module.js';
+    import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.150.1/examples/jsm/webxr/ARButton.js';
+
+    // Canvas Drawing
+    const canvas = document.getElementById('drawCanvas');
+    const ctx = canvas.getContext('2d');
+    let drawing = false;
+
+    const brushSize = document.getElementById('brushSize');
+    const brushColor = document.getElementById('brushColor');
+
+    canvas.addEventListener('mousedown', e => {
+      drawing = true;
+      ctx.beginPath();
+      ctx.moveTo(e.offsetX, e.offsetY);
+    });
+
+    canvas.addEventListener('mousemove', e => {
+      if (!drawing) return;
+      ctx.lineTo(e.offsetX, e.offsetY);
+      ctx.strokeStyle = brushColor.value;
+      ctx.lineWidth = parseInt(brushSize.value, 10);
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      texture.needsUpdate = true;
+    });
+
+    canvas.addEventListener('mouseup', () => drawing = false);
+    canvas.addEventListener('mouseleave', () => drawing = false);
+
+    function clearCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      texture.needsUpdate = true;
+    }
+
+    // Three.js Scene
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.xr.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    // AR Button
+    document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+
+    // Texture from canvas
+    const texture = new THREE.CanvasTexture(canvas);
+    const geometry = new THREE.PlaneGeometry(0.3, 0.3);
+    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+    const plane = new THREE.Mesh(geometry, material);
+    plane.position.set(0, 0, -0.5); // Show 0.5 meters in front of the camera
+    scene.add(plane);
+
+    // Animate
+    function animate() {
+      renderer.setAnimationLoop(() => {
+        renderer.render(scene, camera);
+      });
+    }
+
+    animate();
+  </script>
+</body>
+</html>
