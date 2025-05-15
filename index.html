@@ -59,12 +59,13 @@
     import * as THREE from 'three';
     import { ARButton } from 'three/examples/jsm/webxr/ARButton.js';
 
-    // Drawing canvas setup
     const canvas = document.getElementById('drawCanvas');
     const ctx = canvas.getContext('2d');
     const brushSize = document.getElementById('brushSize');
     const brushColor = document.getElementById('brushColor');
     let drawing = false;
+
+    let lastPlacedPlane = null;
 
     function getTouchPos(e) {
       const rect = canvas.getBoundingClientRect();
@@ -99,9 +100,16 @@
 
     function clearCanvas() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (lastPlacedPlane) {
+        const newTexture = new THREE.CanvasTexture(canvas);
+        newTexture.needsUpdate = true;
+        lastPlacedPlane.material.map = newTexture;
+        lastPlacedPlane.material.needsUpdate = true;
+      }
     }
 
-    // THREE.js and AR setup
+    // THREE.js + WebXR setup
     let camera, scene, renderer;
     let controller, reticle;
     let hitTestSource = null;
@@ -142,6 +150,7 @@
           const plane = new THREE.Mesh(planeGeometry, planeMaterial);
           plane.position.setFromMatrixPosition(reticle.matrix);
           scene.add(plane);
+          lastPlacedPlane = plane;
         }
       });
       scene.add(controller);
