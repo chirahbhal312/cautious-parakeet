@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Canvas Drawing to AR</title>
+  <title>Canvas to AR (Single Placement)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <script type="importmap">
     {
@@ -64,7 +64,7 @@
     const brushSize = document.getElementById('brushSize');
     const brushColor = document.getElementById('brushColor');
     let drawing = false;
-
+    let planePlaced = false;
     let lastPlacedPlane = null;
 
     function getTouchPos(e) {
@@ -109,7 +109,7 @@
       }
     }
 
-    // THREE.js + WebXR setup
+    // THREE + AR setup
     let camera, scene, renderer;
     let controller, reticle;
     let hitTestSource = null;
@@ -129,8 +129,7 @@
       document.body.appendChild(renderer.domElement);
 
       document.body.appendChild(ARButton.createButton(renderer, {
-        requiredFeatures: ['hit-test', 'dom-overlay'],
-        domOverlay: { root: document.body }
+        requiredFeatures: ['hit-test']
       }));
 
       const geometry = new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2);
@@ -142,7 +141,7 @@
 
       controller = renderer.xr.getController(0);
       controller.addEventListener('select', () => {
-        if (reticle.visible) {
+        if (reticle.visible && !planePlaced) {
           const texture = new THREE.CanvasTexture(canvas);
           texture.needsUpdate = true;
           const planeGeometry = new THREE.PlaneGeometry(0.3, 0.3);
@@ -151,6 +150,8 @@
           plane.position.setFromMatrixPosition(reticle.matrix);
           scene.add(plane);
           lastPlacedPlane = plane;
+          planePlaced = true;
+          reticle.visible = false;
         }
       });
       scene.add(controller);
@@ -186,7 +187,7 @@
           hitTestSourceRequested = true;
         }
 
-        if (hitTestSource) {
+        if (hitTestSource && !planePlaced) {
           const hitTestResults = frame.getHitTestResults(hitTestSource);
           if (hitTestResults.length > 0) {
             const hit = hitTestResults[0];
