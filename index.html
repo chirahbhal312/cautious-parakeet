@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Canvas to AR (Image-Based Texture)</title>
+  <title>Canvas to AR (Dynamic Placement)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
@@ -87,12 +87,10 @@
 
     canvas.addEventListener('touchend', () => {
       drawing = false;
-      updateTextureFromCanvas();
     });
 
     function clearCanvas() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      updateTextureFromCanvas();
     }
 
     // THREE.js + WebXR Setup
@@ -106,30 +104,62 @@
     document.body.appendChild(renderer.domElement);
     document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
 
-    const loader = new THREE.TextureLoader();
-    let plane;
+    // Reticle Setup
+    const reticleGeometry = new THREE.RingGeometry(0.05, 0.06, 32).rotateX(-Math.PI / 2);
+    const reticleMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+    const reticle = new THREE.Mesh(reticleGeometry, reticleMaterial);
+    reticle.visible = false;
+    scene.add(reticle);
 
-    function updateTextureFromCanvas() {
+    let hitTestSource = null;
+    let localSpace = null;
+    let placed = false;
+
+    // Function to create texture from canvas
+    function createTextureFromCanvas() {
       const dataURL = canvas.toDataURL('image/png');
-      loader.load(dataURL, (newTexture) => {
-        newTexture.needsUpdate = true;
-        if (plane) {
-          plane.material.map = newTexture;
-          plane.material.needsUpdate = true;
-        } else {
-          const geometry = new THREE.PlaneGeometry(0.3, 0.3);
-          const material = new THREE.MeshBasicMaterial({ map: newTexture, transparent: true });
-          plane = new THREE.Mesh(geometry, material);
-          plane.position.set(0, 0, -0.5);
-          scene.add(plane);
-        }
-      });
+      const loader = new THREE.TextureLoader();
+      return loader.load(dataURL);
     }
 
-    // Initial texture from blank canvas
-    updateTextureFromCanvas();
+    // Function to place the image at the reticle's position
+    function placeImageAtReticle() {
+      const texture = createTextureFromCanvas();
+      const geometry = new THREE.PlaneGeometry(0.3, 0.3);
+      const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+      const plane = new THREE.Mesh(geometry, material);
+      plane.position.setFromMatrixPosition(reticle.matrix);
+      plane.quaternion.setFromRotationMatrix(reticle.matrix);
+      scene.add(plane);
+    }
 
-    renderer.setAnimationLoop(() => {
+    renderer.xr.addEventListener('sessionstart', async () => {
+      const session = renderer.xr.getSession();
+      const viewerSpace = await session.requestReferenceSpace('viewer');
+      hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+      localSpace = await session.requestReferenceSpace('local');
+
+      session.addEventListener('select', () => {
+        if (reticle.visible && !placed) {
+          placeImageAtReticle();
+          placed = true;
+        }
+      });
+    });
+
+    renderer.setAnimationLoop((timestamp, frame) => {
+      if (frame) {
+        const referenceSpace = localSpace;
+        const hitTestResults = frame.getHitTestResults(hitTestSource);
+        if (hitTestResults.length > 0) {
+          const hit = hitTestResults[0];
+          const pose = hit.getPose(referenceSpace);
+          reticle.visible = true;
+          reticle.matrix.fromArray(pose.transform.matrix);
+        } else {
+          reticle.visible = false;
+        }
+      }
       renderer.render(scene, camera);
     });
   </script>
